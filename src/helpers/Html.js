@@ -27,12 +27,7 @@ export default class Html extends Component {
     return (
       <html lang="en-us">
         <head>
-          {head.base.toComponent()}
-          {head.title.toComponent()}
-          {head.meta.toComponent()}
-          {head.link.toComponent()}
-          {head.script.toComponent()}
-
+          {['base', 'title', 'meta', 'link', 'script'].map(key => head[key].toComponent())}
           <link rel="shortcut icon" href="/favicon.ico" />
           <meta name="viewport" content="width=device-width, initial-scale=1" />
           {/* styles (will be present only in production with webpack extract text plugin) */}

@@ -2,7 +2,6 @@ import Express from 'express';
 import React from 'react';
 import ReactDOM from 'react-dom/server';
 import config from './config';
-import favicon from 'serve-favicon';
 import compression from 'compression';
 import httpProxy from 'http-proxy';
 import path from 'path';
@@ -41,16 +40,10 @@ server.on('upgrade', (req, socket, head) => {
 
 // added the error handling to avoid https://github.com/nodejitsu/node-http-proxy/issues/527
 proxy.on('error', (error, req, res) => {
-  let json;
-  if (error.code !== 'ECONNRESET') {
+  if (error.code !== 'ECONNREFUSED') {
     console.error('proxy error', error);
   }
-  if (!res.headersSent) {
-    res.writeHead(500, {'content-type': 'application/json'});
-  }
-
-  json = {error: 'proxy_error', reason: error.message};
-  res.end(JSON.stringify(json));
+  res.end(JSON.stringify({ error: 'proxy_error', reason: error.message }));
 });
 
 app.use((req, res) => {

@@ -1,0 +1,12 @@
+.disconnected {
+  color: gray;
+}
+.down {
+  color: red;
+}
+.same {
+  color: black;
+}
+.up {
+  color: green;
+}

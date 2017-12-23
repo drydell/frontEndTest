@@ -21,21 +21,20 @@ const dest = document.getElementById('content');
 const store = createStore(_browserHistory, client, window.__data);
 const history = syncHistoryWithStore(_browserHistory, store);
 
+function reconnect() {
+  if (socket.connected === false && socket.connecting === false) {
+    socket.reconnect();
+  }
+}
+
 function initSocket() {
-  let socket = io('', {path: '/ws'});
-  socket.on('snapshot', (data) => {
-    console.log(data);
-    socket.emit('my other event', { my: 'data from client' });
-  });
-  socket.on('update', (data) => {
-    console.log(data);
-  });
-  socket.on('disconnect',() => {
-    socket = undefined;
-  });
+  const socket = io('', {path: '/ws'});
+  socket.on('error', err => console.log('socket error', err));
   return socket;
 }
+
 global.socket = initSocket();
+global.intervalId = setInterval(reconnect, 2500);
 
 const component = (
   <Router

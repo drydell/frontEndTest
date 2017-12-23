@@ -1,106 +1,117 @@
-import React, { Component, PropTypes } from 'react';
+import React, { Component } from 'react';
 import { connect } from 'react-redux';
-import { Cell, Column, ColumnGroup, Table } from 'fixed-data-table';
+import { Cell, Column, Table } from 'fixed-data-table';
+import { ThrottledRenderer } from '../../components';
 import '../../../node_modules/fixed-data-table/dist/fixed-data-table.css';
-import _ from 'lodash';
+import './App.css';
+import { map, reduce } from 'lodash';
 
 @connect(
-    state => ({rows: state.rows, cols: state.cols || new Array(10)})
+  state => ({
+    rows: state.rows,
+    cols: state.cols || new Array(10),
+    isDisconnected: state.isDisconnected || false
+  })
 )
+
 export default class App extends Component {
 
-  constructor(props) {
-    super(props);
-    this.state = {
-      rows: [],
-      cols: new Array(10)
-    };
-    this.onSnapshotReceived = this.onSnapshotReceived.bind(this);
-    this.onUpdateReceived = this.onUpdateReceived.bind(this);
-    this._cell = this._cell.bind(this);
-    this._headerCell = this._headerCell.bind(this);
-    this._generateCols = this._generateCols.bind(this);
-  }
-
-  onSnapshotReceived(data) {
-    let rows = [];
-    data.forEach(row => {
-      rows[row.id] = row;
-    });
-    // const rows = this.state.rows.concat(data);
-    console.log('snapshot' + rows);
-    const cols = Object.keys(rows[0]);
-    this.setState({rows, cols});
+  state = {
+    rows: [],
+    cols: new Array(10),
+    isDisconnected: false
   };
-  onUpdateReceived(data) {
-    // const rows = this.state.rows.concat(data);
 
-    let rows = this.state.rows;
-    data.forEach(newRow => {
-      rows[newRow.id] = newRow;
-    });
-
-    this.setState({rows});
-  };
-  _cell(cellProps) {
-    const rowIndex = cellProps.rowIndex;
-    const rowData = this.state.rows[rowIndex];
-    const col = this.state.cols[cellProps.columnKey];
-    const content = rowData[col];
-    return (
-      <Cell>{content}</Cell>
-    );
-  }
-
-  _headerCell(cellProps) {
-    const col = this.state.cols[cellProps.columnKey];
-    return (
-      <Cell>{col}</Cell>
-    );
-  }
-
-  _generateCols() {
-    console.log('generating...');
-    let cols = [];
-    this.state.cols.forEach((row, index) => {
-      cols.push(
-        <Column
-          width={100}
-          flexGrow={1}
-          cell={this._cell}
-          header={this._headerCell}
-          columnKey={index}
-          />
-      );
-    });
-    console.log(cols);
-    return cols;
-  };
   componentDidMount() {
     if (socket) {
       socket.on('snapshot', this.onSnapshotReceived);
       socket.on('updates', this.onUpdateReceived);
+      socket.on('disconnect', this.onDisconnect);
     }
-  };
+  }
+
   componentWillUnmount() {
     if (socket) {
       socket.removeListener('snapshot', this.onSnapshotReceived);
       socket.removeListener('updates', this.onUpdateReceived);
+      socket.removeListener('disconnect', this.onDisconnect);
     }
+  }
+
+  onDisconnect = () => this.setState({ isDisconnected: true });
+
+  onSnapshotReceived = data => {
+    const rows = [];
+    data.forEach(row => {
+      rows[row.id] = reduce(row, (accum, value, key) => {
+        accum[key] = { value, trend: 'same' };
+        return accum;
+      }, {});
+    });
+
+    this.setState({rows, cols: Object.keys(rows[0]), isDisconnected: false});
   };
 
-  render() {
-    const columns = this._generateCols();
+  onUpdateReceived = data => {
+    const { rows } = this.state;
+    data.forEach(newRow => {
+      rows[newRow.id] = reduce(rows[newRow.id], (accum, val, key) => {
+        accum[key] = { value: newRow[key] };
+        switch (true) {
+          case val.value > newRow[key]:
+            accum[key].trend = 'down';
+            break;
+          case val.value < newRow[key]:
+            accum[key].trend = 'up';
+            break;
+          default:
+            accum[key].trend = 'same';
+            break;
+        }
+        return accum;
+      }, {});
+    });
+
+    this.setState({ rows, isDisconnected: false });
+  };
+
+  _cell = ({ columnKey, rowIndex }) => {
+    const { cols, rows, isDisconnected } = this.state;
+    const { value: content, trend } = rows[rowIndex][cols[columnKey]];
     return (
-      <Table
-        rowHeight={30}
-        width={window.innerWidth}
-        maxHeight={window.innerHeight}
-        headerHeight={35}
-        rowsCount={this.state.rows.length}
+      <Cell className={isDisconnected ? 'disconnected' : trend}>
+        {content}
+      </Cell>
+    );
+  };
+
+  _headerCell = ({ columnKey }) => <Cell>{this.state.cols[columnKey]}</Cell>;
+
+  _generateCols = () => map(this.state.cols, (row, index) => {
+    return (
+      <Column
+        width={100}
+        flexGrow={1}
+        cell={this._cell}
+        header={this._headerCell}
+        columnKey={index}
+        />
+    );
+  });
+
+  render() {
+    return (
+      <ThrottledRenderer interval={750}>
+        <Table
+          rowHeight={30}
+          width={window.innerWidth}
+          maxHeight={window.innerHeight}
+          headerHeight={35}
+          rowsCount={this.state.rows.length}
         >
-        {columns}
-      </Table>
+          {this._generateCols()}
+        </Table>
+      </ThrottledRenderer>
     );
   }
 }
